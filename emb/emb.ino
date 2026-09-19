@@ -124,28 +124,6 @@ void scanBoard() {
   }
 }
 
-/*
-void detectStateChange() {
-  // Only check column 0 and row 0
-  int c = 0;
-  int r = 0;
-
-  // Check if square (0,0) changed
-  if (currState[c][r] != prevState[c][r]) {
-
-
-    if (currState[c][r] == true) {
-      Serial.println("PLACED");
-    } else {
-      Serial.println("REMOVED");
-    }
-
-
-    // Update state for (0,0)
-    prevState[c][r] = currState[c][r];
-  }
-}
-*/
 
 
 void detectStateChange() {
