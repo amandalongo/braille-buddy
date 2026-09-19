@@ -1,2 +1,2 @@
-# feelphabet
-feelphabet - learning braille for kids made interactive and easy! 
+# braille buddy
+braille buddy - learning braille for kids made interactive and easy! 
