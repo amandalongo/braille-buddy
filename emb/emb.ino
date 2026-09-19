@@ -102,8 +102,8 @@ void setup() {
 }
 
 void loop() {
-  processSubmitButton();
-  delay(20);
+  scanBrailleMatrix();
+  delay(500);
 }
 
 void processSubmitButton() {
@@ -130,16 +130,33 @@ void processSubmitButton() {
 }
 
 void scanBrailleMatrix() {
+  Serial.println("\n--- Scanning Matrix ---");
+  bool anyActive = false;
+
   for (int c = 0; c < col; c++) {
     digitalWrite(colPins[c], HIGH);
     delayMicroseconds(10);
 
     for (int r = 0; r < row; r++) {
       currState[c][r] = (digitalRead(rowPins[r]) == HIGH);
+
+      // Print immediately when a reed switch is detected closed
+      if (currState[c][r]) {
+        Serial.print("Magnet Detected -> Col: ");
+        Serial.print(c);
+        Serial.print(" | Row: ");
+        Serial.println(r);
+        anyActive = true;
+      }
     }
 
     digitalWrite(colPins[c], LOW);
   }
+
+  if (!anyActive) {
+    Serial.println("No magnets detected (Empty Cell)");
+  }
+  Serial.println("-----------------------");
 }
 
 void serializeCellState(char *brailleCell) {
