@@ -3,7 +3,7 @@ const int numCol = 2;
 const int numRow = 3;
 
 const int colPins[numCol] = {D0, D1};
-const int rowPins[numRow] = {D2, D3};
+const int rowPins[numRow] = {D2, D3, D4};
 
 // States
 bool prevState[numCol][numRow];
