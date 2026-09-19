@@ -6,41 +6,39 @@
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// Define constants
-const int numCol = 2;
-const int numRow = 3;
+// Matrix Dimensions
+const int col = 2;
+const int row = 3;
 
-const int colPins[numCol] = {D0, D1};
-const int rowPins[numRow] = {D2, D3, D4};
+// Pin Assignments
+const int colPins[col] = {D0, D1};
+const int rowPins[row] = {D2, D3, D4};
+const int btnPin = D7;
 
-// States
-bool prevState[numCol][numRow];
-bool currState[numCol][numRow];
+// Hardware States
+bool currState[col][row];
+bool lastButtonState = HIGH; // Active-LOW button default state
 
-// Bluetooth setup
-BLECharacteristic *pCharacteristic;
-bool deviceConnected = false;
+// Bluetooth Infrastructure
+BLECharacteristic *pBrailleCharacteristic;
+bool isAppConnected = false;
 
-// Make sure board is stable, before app gets the message
-char lastScan[7] = "000000";
-char lastSent[7] = "000000";
-unsigned long lastScanChangeMs = 0;
-const unsigned long STABLE_MS = 150;
+// Transmitted 6-dot state string ("d1d2d3d4d5d6")
+char brailleCell[7] = "000000";
 
-// Function prototypes
-void scanBoard();
-void detectStateChange();
-void buildBoardString(char *out);
-void notifyIfStable();
+// Function Declarations
+void scanBrailleMatrix();
+void serializeCellState(char *brailleCell);
+void processSubmitButton();
 
-class MyServerCallbacks : public BLEServerCallbacks {
+class BrailleServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
-    deviceConnected = true;
-    Serial.println("Success! App Connected.");
+    isAppConnected = true;
+    Serial.println("BLE Success: Mobile App Connected.");
   }
   void onDisconnect(BLEServer *pServer) {
-    deviceConnected = false;
-    Serial.println("App Disconnected. Restarting advertising...");
+    isAppConnected = false;
+    Serial.println("BLE Alert: App Disconnected. Restarting advertising...");
     pServer->startAdvertising();
   }
 };
@@ -48,46 +46,49 @@ class MyServerCallbacks : public BLEServerCallbacks {
 void setup() {
   Serial.begin(115200);
 
-  // Wait for serial to load
   while (!Serial && millis() < 3000);
-  
   delay(1000);
 
   Serial.println("=================");
-  Serial.println("Starting Setup...");
+  Serial.println("Starting BrailleBuddy Setup...");
 
-  // Set col pins into output pins
-  for (int c = 0; c < numCol; c++) {
+  // Configure Submit Button (Active LOW)
+  pinMode(btnPin, INPUT_PULLUP);
+  Serial.println("Configured Submit Button Pin");
+
+  // Configure Column Pins (Outputs)
+  for (int c = 0; c < col; c++) {
     pinMode(colPins[c], OUTPUT);
     digitalWrite(colPins[c], LOW);
   }
-  Serial.println("Set Column Pins");
+  Serial.println("Configured Column Pins");
 
-  // Set row pins to input pull-down pins
-  for (int r = 0; r < numRow; r++) {
+  // Configure Row Pins (Inputs with Pull-Downs)
+  for (int r = 0; r < row; r++) {
     pinMode(rowPins[r], INPUT_PULLDOWN);
   }
-  Serial.println("Set Row Pins");
+  Serial.println("Configured Row Pins");
 
-  // Set an Empty Board
-  for (int c = 0; c < numCol; c++) {
-    for (int r = 0; r < numRow; r++) {
-      prevState[c][r] = false;
+  // Clear initial matrix state
+  for (int c = 0; c < col; c++) {
+    for (int r = 0; r < row; r++) {
       currState[c][r] = false;
     }
   }
 
-  // BLE
+  // Initialize BLE Stack
   BLEDevice::init("BrailleBuddy");
   BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  pServer->setCallbacks(new BrailleServerCallbacks());
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
-  pCharacteristic = pService->createCharacteristic(
+  pBrailleCharacteristic = pService->createCharacteristic(
       CHARACTERISTIC_UUID,
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  pCharacteristic->addDescriptor(new BLE2902());   // lets the phone subscribe to notifications
-  pCharacteristic->setValue((uint8_t *)lastSent, 6);  // a READ always returns the current board
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+  );
+  
+  pBrailleCharacteristic->addDescriptor(new BLE2902());
+  pBrailleCharacteristic->setValue((uint8_t *)brailleCell, 6);
   pService->start();
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -97,91 +98,55 @@ void setup() {
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
 
-  Serial.println("Setup Completed");
+  Serial.println("Setup Completed Successfully");
 }
 
 void loop() {
-  scanBoard();
-  detectStateChange();
-  notifyIfStable(); // BLE update
-  delay(50);
+  processSubmitButton();
+  delay(20);
 }
 
-void scanBoard() {
-  for (int c = 0; c < numCol; c++) {
+void processSubmitButton() {
+  int currentButtonState = digitalRead(btnPin);
 
-    // Turn on col
+  // Trigger on button press edge (HIGH -> LOW transition)
+  if (currentButtonState == LOW && lastButtonState == HIGH) {    
+    scanBrailleMatrix();
+    serializeCellState(brailleCell);
+
+    pBrailleCharacteristic->setValue((uint8_t *)brailleCell, 6);
+
+    if (isAppConnected) {
+      pBrailleCharacteristic->notify();
+    }
+    
+    Serial.print("Submit Triggered -> Transmitted State: ");
+    Serial.println(brailleCell);
+
+    delay(50); // Button contact debounce
+  }
+
+  lastButtonState = currentButtonState;
+}
+
+void scanBrailleMatrix() {
+  for (int c = 0; c < col; c++) {
     digitalWrite(colPins[c], HIGH);
     delayMicroseconds(10);
 
-    // Read row
-    for (int r = 0; r < numRow; r++) {
+    for (int r = 0; r < row; r++) {
       currState[c][r] = (digitalRead(rowPins[r]) == HIGH);
     }
 
-    // Turn off col
     digitalWrite(colPins[c], LOW);
   }
 }
 
-
-
-void detectStateChange() {
-  for (int c = 0; c < numCol; c++) {
-    for (int r = 0; r < numRow; r++) {
-
-      // Check if something is different
-      if (currState[c][r] != prevState[c][r]) {
-        
-        char buffer[60];
-
-        if (currState[c][r] == true) {
-          sprintf(buffer, "Piece Placed on Col: %d | Row: %d", c, r);
-        } else {
-          sprintf(buffer, "Piece Removed on Col: %d | Row: %d", c, r);
-        }
-
-        Serial.println(buffer);
-
-        // Update state
-        prevState[c][r] = currState[c][r];
-      }
-
+void serializeCellState(char *brailleCell) {
+  for (int c = 0; c < col; c++) {
+    for (int r = 0; r < row; r++) {
+      brailleCell[c * row + r] = currState[c][r] ? '1' : '0';
     }
   }
-}
-
-
-// Turns currState into "d1 d2 d3 d4 d5 d6" as '0'/'1' characters.
-void buildBoardString(char *out) {
-  for (int c = 0; c < numCol; c++) {
-    for (int r = 0; r < numRow; r++) {
-      out[c * numRow + r] = currState[c][r] ? '1' : '0';
-    }
-  }
-  out[6] = '\0';
-}
-
-void notifyIfStable() {
-  char now[7];
-  buildBoardString(now);
-
-  // Pattern changed since last scan: restart the stability timer.
-  if (strcmp(now, lastScan) != 0) {
-    strcpy(lastScan, now);
-    lastScanChangeMs = millis();
-    return;
-  }
-
-  // Stable long enough and different from what the app last saw: send it.
-  if (millis() - lastScanChangeMs >= STABLE_MS && strcmp(now, lastSent) != 0) {
-    strcpy(lastSent, now);
-    pCharacteristic->setValue((uint8_t *)now, 6);   //always update, so READ works too
-    if (deviceConnected) {
-      pCharacteristic->notify();
-    }
-    Serial.print("Board -> ");
-    Serial.println(now);
-  }
-  // test to see if I can push
+  brailleCell[6] = '\0';
 }
