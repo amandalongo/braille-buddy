@@ -1,0 +1,198 @@
+import asyncio
+import random
+import sys
+import subprocess
+from BrailleListener import BrailleListener, BRAILLE_MAP
+
+# Reverse mapping to look up binary patterns from characters
+REVERSE_BRAILLE_MAP = {v: k for k, v in BRAILLE_MAP.items()}
+
+# Define the 5-letter unit structure
+ALPHABET_UNITS = [
+    {"lesson": 1, "chars": ["A", "B", "C", "D", "E"]},
+    {"lesson": 2, "chars": ["F", "G", "H", "I", "J"]},
+    {"lesson": 3, "chars": ["K", "L", "M", "N", "O"]},
+    {"lesson": 4, "chars": ["P", "Q", "R", "S", "T"]},
+    {"lesson": 5, "chars": ["U", "V", "W", "X", "Y", "Z"]},
+]
+
+DOT_DIRECTIONS = {
+    0: "top left tile",
+    1: "middle left tile",
+    2: "bottom left tile",
+    3: "top right tile",
+    4: "middle right tile",
+    5: "bottom right tile",
+}
+
+
+def format_braille_positions(binary_str: str) -> str:
+    """Converts a 6-bit binary string into spatial verbal directions."""
+    if len(binary_str) != 6:
+        return "no tiles"
+
+    active_positions = [
+        DOT_DIRECTIONS[i] for i, bit in enumerate(binary_str) if bit == "1"
+    ]
+
+    if not active_positions:
+        return "no tiles"
+    elif len(active_positions) == 1:
+        return f"place dot on {active_positions[0]}"
+    elif len(active_positions) == 2:
+        return f"place dots on {active_positions[0]} and {active_positions[1]}"
+    else:
+        all_but_last = ", ".join(active_positions[:-1])
+        return f"place dots on {all_but_last}, and {active_positions[-1]}"
+
+
+class NativeTTS:
+    """Uses macOS native 'say' command with Samantha to guarantee audio playback."""
+
+    def __init__(self, voice: str = "Samantha", rate: int = 175):
+        self.voice = voice
+        self.rate = str(rate)
+
+    async def speak(self, text: str):
+        if not text:
+            return
+
+        loop = asyncio.get_running_loop()
+        # Run macOS 'say' in an executor thread to keep Bleak listener non-blocking
+        await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["say", "-v", self.voice, "-r", self.rate, text],
+                stderr=subprocess.DEVNULL,
+            ),
+        )
+
+
+class UnitQuizEngine:
+    def __init__(self, listener: BrailleListener):
+        self.listener = listener
+        self.tts = NativeTTS(voice="Albert", rate=125)
+        self.total_correct = 0
+        self.total_attempted = 0
+
+    async def speak_and_print(self, text: str):
+        """Prints formatted text to console and speaks clean text aloud via Samantha."""
+        print(text)
+        speech_text = text.replace("->", "").replace("=", "").replace("-", "").strip()
+        if speech_text:
+            await self.tts.speak(speech_text)
+
+    async def teach_lesson(self, lesson_num: int, chars: list[str]):
+        """Instructional Phase: Forces retry loops until each character is formed correctly."""
+        await self.speak_and_print(
+            f"\n{'=' * 55}\n UNIT 1: ALPHABET — LESSON {lesson_num} (Letters {chars[0]} - {chars[-1]}) \n{'=' * 55}"
+        )
+        await self.speak_and_print(
+            "Instructions: Follow the directions to place dots on your board. You must get each letter correct before moving on."
+        )
+
+        for letter in chars:
+            binary_pattern = REVERSE_BRAILLE_MAP.get(letter, "000000")
+            directions = format_braille_positions(binary_pattern)
+
+            # Mastery loop: keeps looping on the same letter until correct
+            while True:
+                prompt_msg = f"Letter {letter}: {directions}."
+                await self.speak_and_print(f"\n-> {prompt_msg}")
+
+                received = await self.listener.wait_for_input()
+                if received == letter:
+                    await self.speak_and_print(f"Correct! You formed {letter}.")
+                    break
+                else:
+                    retry_msg = f"Hardware read {received}. Incorrect. Let's try again. To form {letter}, {directions}."
+                    await self.speak_and_print(f"Note: {retry_msg}")
+
+    async def quiz_lesson(self, lesson_num: int, chars: list[str]):
+        """Quiz Phase: Prompts letters out of order and provides audio corrections."""
+        await self.speak_and_print(f"\n{'-' * 55}\n QUIZ: LESSON {lesson_num}\n{'-' * 55}")
+        await self.speak_and_print("Quiz time! Form the requested letters out of order from memory.")
+
+        quiz_queue = chars.copy()
+        random.shuffle(quiz_queue)
+
+        for target in quiz_queue:
+            self.total_attempted += 1
+            expected_pattern = REVERSE_BRAILLE_MAP.get(target, "000000")
+            directions = format_braille_positions(expected_pattern)
+
+            await self.speak_and_print(f"\n[Quiz Item] Form character: {target}")
+
+            received = await self.listener.wait_for_input()
+
+            if received == target:
+                self.total_correct += 1
+                await self.speak_and_print(f"Correct! {received} submitted.")
+            elif received == "UNKNOWN":
+                await self.speak_and_print(f"Unrecognized pattern. To form {target}, {directions}.")
+            else:
+                await self.speak_and_print(f"Incorrect. Received {received}. To form {target}, {directions}.")
+
+    async def start(self):
+        await self.speak_and_print("Welcome to Braille Buddy, Unit 1 Alphabet Curriculum.")
+        await self.speak_and_print("Progress through 5 lessons covering A through Z.")
+
+        try:
+            for unit in ALPHABET_UNITS:
+                lesson_num = unit["lesson"]
+                chars = unit["chars"]
+
+                await self.teach_lesson(lesson_num, chars)
+                await self.quiz_lesson(lesson_num, chars)
+
+                await self.speak_and_print(f"\nLesson {lesson_num} Complete!")
+
+                if lesson_num < len(ALPHABET_UNITS):
+                    await self.speak_and_print("Press Enter in the terminal to start the next lesson.")
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(None, input)
+
+            await self.speak_and_print("\nCongratulations! You have completed Unit 1, Alphabet A through Z!")
+
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self.speak_and_print("\nUnit progression paused by user.")
+        finally:
+            await self.display_summary()
+
+    async def display_summary(self):
+        print("\n" + "=" * 55)
+        print("                UNIT 1 PROGRESS SUMMARY                ")
+        print("=" * 55)
+        if self.total_attempted > 0:
+            accuracy = (self.total_correct / self.total_attempted) * 100
+            summary_text = (
+                f"Total Quiz Attempts: {self.total_attempted}. "
+                f"Correct Answers: {self.total_correct}. "
+                f"Overall Accuracy: {accuracy:.1f} percent."
+            )
+            print(f" Total Quiz Attempts : {self.total_attempted}")
+            print(f" Correct Answers    : {self.total_correct}")
+            print(f" Overall Accuracy   : {accuracy:.1f}%")
+            await self.tts.speak(summary_text)
+        else:
+            await self.speak_and_print("No quiz questions attempted.")
+        print("=" * 55 + "\n")
+
+
+async def main():
+    listener = BrailleListener()
+    if not await listener.connect():
+        sys.exit(1)
+
+    engine = UnitQuizEngine(listener)
+    try:
+        await engine.start()
+    finally:
+        await listener.disconnect()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nExiting program.")
