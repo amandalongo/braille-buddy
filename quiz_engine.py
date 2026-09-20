@@ -62,10 +62,10 @@ class UnitQuizEngine:
     async def teach_lesson(self, lesson_num: int, chars: list[str]):
         """Instructional Phase: Forces retry loops until each character is formed correctly."""
         await self.speak_and_print(
-            f"\n{'=' * 55}\n UNIT 1: ALPHABET — LESSON {lesson_num} (Letters {chars[0]} - {chars[-1]}) \n{'=' * 55}"
+            "Hi, I'm Dotty! I will be your braille learning buddy; Let's learn the alphabet!"
         )
         await self.speak_and_print(
-            "Instructions: Follow the directions to place dots on your board. You must get each letter correct before moving on."
+            f"\n{'=' * 55}\n UNIT 1: ALPHABET — LESSON {lesson_num} (Letters {chars[0]} - {chars[-1]}) \n{'=' * 55}"
         )
 
         for letter in chars:
@@ -79,16 +79,16 @@ class UnitQuizEngine:
 
                 received = await self.listener.wait_for_input()
                 if received == letter:
-                    await self.speak_and_print(f"Correct! You formed {letter}.")
+                    await self.speak_and_print(f"Correct! You made letter {letter}.")
                     break
                 else:
-                    retry_msg = f"Hardware read {received}. Incorrect. Let's try again. To form {letter}, {directions}."
+                    retry_msg = f"Oops! you made {received}. Let's try again. To form {letter}, {directions}."
                     await self.speak_and_print(f"Note: {retry_msg}")
 
     async def quiz_lesson(self, lesson_num: int, chars: list[str]):
         """Quiz Phase: Prompts letters out of order and provides audio corrections."""
         await self.speak_and_print(f"\n{'-' * 55}\n QUIZ: LESSON {lesson_num}\n{'-' * 55}")
-        await self.speak_and_print("Quiz time! Form the requested letters out of order from memory.")
+        await self.speak_and_print("Quiz time! Let's try to make letters now!")
 
         quiz_queue = chars.copy()
         random.shuffle(quiz_queue)
@@ -106,9 +106,9 @@ class UnitQuizEngine:
                 self.total_correct += 1
                 await self.speak_and_print(f"Correct! {received} submitted.")
             elif received == "UNKNOWN":
-                await self.speak_and_print(f"Unrecognized pattern. To form {target}, {directions}.")
+                await self.speak_and_print(f"Oops, that's not a letter. To form {target}, {directions}.")
             else:
-                await self.speak_and_print(f"Incorrect. Received {received}. To form {target}, {directions}.")
+                await self.speak_and_print(f"Oops you made {received}. To form {target}, {directions}.")
 
     async def start(self):
         await self.speak_and_print("Welcome to Braille Buddy, Unit 1 Alphabet Curriculum.")
@@ -125,7 +125,7 @@ class UnitQuizEngine:
                 await self.speak_and_print(f"\nLesson {lesson_num} Complete!")
 
                 if lesson_num < len(ALPHABET_UNITS):
-                    await self.speak_and_print("Press Enter in the terminal to start the next lesson.")
+                    await self.speak_and_print("Press Enter to move tot he next lesson.")
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, input)
 
@@ -133,27 +133,8 @@ class UnitQuizEngine:
 
         except (asyncio.CancelledError, KeyboardInterrupt):
             await self.speak_and_print("\nUnit progression paused by user.")
-        finally:
-            await self.display_summary()
 
-    async def display_summary(self):
-        print("\n" + "=" * 55)
-        print("                UNIT 1 PROGRESS SUMMARY                ")
-        print("=" * 55)
-        if self.total_attempted > 0:
-            accuracy = (self.total_correct / self.total_attempted) * 100
-            summary_text = (
-                f"Total Quiz Attempts: {self.total_attempted}. "
-                f"Correct Answers: {self.total_correct}. "
-                f"Overall Accuracy: {accuracy:.1f} percent."
-            )
-            print(f" Total Quiz Attempts : {self.total_attempted}")
-            print(f" Correct Answers    : {self.total_correct}")
-            print(f" Overall Accuracy   : {accuracy:.1f}%")
-            await speak(summary_text)
-        else:
-            await self.speak_and_print("No quiz questions attempted.")
-        print("=" * 55 + "\n")
+
 
 
 async def main():
