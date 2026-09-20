@@ -10,6 +10,7 @@
 const int col = 2;
 const int row = 3;
 
+
 // Pin Assignments
 const int colPins[col] = {D0, D1};
 const int rowPins[row] = {D2, D3, D4};
@@ -102,15 +103,16 @@ void setup() {
 }
 
 void loop() {
-  scanBrailleMatrix();
-  delay(500);
+  processSubmitButton();
+  delay(100);
 }
 
 void processSubmitButton() {
   int currentButtonState = digitalRead(btnPin);
 
   // Trigger on button press edge (HIGH -> LOW transition)
-  if (currentButtonState == LOW && lastButtonState == HIGH) {    
+  if (currentButtonState == LOW && lastButtonState == HIGH) {
+    Serial.println("Btn Pressed");
     scanBrailleMatrix();
     serializeCellState(brailleCell);
 
@@ -123,7 +125,7 @@ void processSubmitButton() {
     Serial.print("Submit Triggered -> Transmitted State: ");
     Serial.println(brailleCell);
 
-    delay(50); // Button contact debounce
+    
   }
 
   lastButtonState = currentButtonState;
