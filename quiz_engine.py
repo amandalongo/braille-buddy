@@ -1,8 +1,8 @@
 import asyncio
 import random
 import sys
-import subprocess
 from BrailleListener import BrailleListener, BRAILLE_MAP
+from speak import speak
 
 # Reverse mapping to look up binary patterns from characters
 REVERSE_BRAILLE_MAP = {v: k for k, v in BRAILLE_MAP.items()}
@@ -46,41 +46,18 @@ def format_braille_positions(binary_str: str) -> str:
         return f"place dots on {all_but_last}, and {active_positions[-1]}"
 
 
-class NativeTTS:
-    """Uses macOS native 'say' command with Samantha to guarantee audio playback."""
-
-    def __init__(self, voice: str = "Samantha", rate: int = 175):
-        self.voice = voice
-        self.rate = str(rate)
-
-    async def speak(self, text: str):
-        if not text:
-            return
-
-        loop = asyncio.get_running_loop()
-        # Run macOS 'say' in an executor thread to keep Bleak listener non-blocking
-        await loop.run_in_executor(
-            None,
-            lambda: subprocess.run(
-                ["say", "-v", self.voice, "-r", self.rate, text],
-                stderr=subprocess.DEVNULL,
-            ),
-        )
-
-
 class UnitQuizEngine:
     def __init__(self, listener: BrailleListener):
         self.listener = listener
-        self.tts = NativeTTS(voice="Albert", rate=125)
         self.total_correct = 0
         self.total_attempted = 0
 
     async def speak_and_print(self, text: str):
-        """Prints formatted text to console and speaks clean text aloud via Samantha."""
+        """Prints formatted text to console and speaks clean text aloud via Ana."""
         print(text)
         speech_text = text.replace("->", "").replace("=", "").replace("-", "").strip()
         if speech_text:
-            await self.tts.speak(speech_text)
+            await speak(speech_text)
 
     async def teach_lesson(self, lesson_num: int, chars: list[str]):
         """Instructional Phase: Forces retry loops until each character is formed correctly."""
@@ -173,7 +150,7 @@ class UnitQuizEngine:
             print(f" Total Quiz Attempts : {self.total_attempted}")
             print(f" Correct Answers    : {self.total_correct}")
             print(f" Overall Accuracy   : {accuracy:.1f}%")
-            await self.tts.speak(summary_text)
+            await speak(summary_text)
         else:
             await self.speak_and_print("No quiz questions attempted.")
         print("=" * 55 + "\n")
