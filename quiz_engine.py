@@ -3,6 +3,7 @@ import random
 import sys
 from BrailleListener import BrailleListener, BRAILLE_MAP
 from speak import speak
+import time
 
 # Reverse mapping to look up binary patterns from characters
 REVERSE_BRAILLE_MAP = {v: k for k, v in BRAILLE_MAP.items()}
@@ -38,12 +39,12 @@ def format_braille_positions(binary_str: str) -> str:
     if not active_positions:
         return "no tiles"
     elif len(active_positions) == 1:
-        return f"place dot on {active_positions[0]}"
+        return f"place dot on {active_positions[0]}. Click the button when done."
     elif len(active_positions) == 2:
-        return f"place dots on {active_positions[0]} and {active_positions[1]}"
+        return f"place dots on {active_positions[0]} and {active_positions[1]}.Click the button when done. "
     else:
         all_but_last = ", ".join(active_positions[:-1])
-        return f"place dots on {all_but_last}, and {active_positions[-1]}"
+        return f"place dots on {all_but_last}, and {active_positions[-1]}. Click the button when done."
 
 
 class UnitQuizEngine:
@@ -62,10 +63,18 @@ class UnitQuizEngine:
     async def teach_lesson(self, lesson_num: int, chars: list[str]):
         """Instructional Phase: Forces retry loops until each character is formed correctly."""
         await self.speak_and_print(
-            "Hi, I'm Dotty! I will be your braille learning buddy; Let's learn the alphabet!"
+            "Hi, I'm Dotty! I will be your braille learning buddy"
+        )
+        time.sleep(.5)
+        await self.speak_and_print(
+            "What is your name?"
+        )
+        time.sleep(3)
+        await self.speak_and_print(
+            "Braille buddy device paired!"
         )
         await self.speak_and_print(
-            f"\n{'=' * 55}\n UNIT 1: ALPHABET — LESSON {lesson_num} (Letters {chars[0]} - {chars[-1]}) \n{'=' * 55}"
+            f"\n{'=' * 55}\n Let's start learning! We are going to learn (Letters {chars[0]} through {chars[-1]}) \n{'=' * 55}"
         )
 
         for letter in chars:
@@ -79,16 +88,14 @@ class UnitQuizEngine:
 
                 received = await self.listener.wait_for_input()
                 if received == letter:
-                    await self.speak_and_print(f"Correct! You made letter {letter}.")
+                    await self.speak_and_print(f"Good Job! You made letter {letter}.")
                     break
                 else:
-                    retry_msg = f"Oops! you made {received}. Let's try again. To form {letter}, {directions}."
-                    await self.speak_and_print(f"Note: {retry_msg}")
+                    await self.speak_and_print(f"Oops! you made {received}. Let's try again.")
 
     async def quiz_lesson(self, lesson_num: int, chars: list[str]):
         """Quiz Phase: Prompts letters out of order and provides audio corrections."""
-        await self.speak_and_print(f"\n{'-' * 55}\n QUIZ: LESSON {lesson_num}\n{'-' * 55}")
-        await self.speak_and_print("Quiz time! Let's try to make letters now!")
+        await self.speak_and_print("Good Job Amanda! You finished Lesson 1 let's practice what you learned")
 
         quiz_queue = chars.copy()
         random.shuffle(quiz_queue)
@@ -98,21 +105,21 @@ class UnitQuizEngine:
             expected_pattern = REVERSE_BRAILLE_MAP.get(target, "000000")
             directions = format_braille_positions(expected_pattern)
 
-            await self.speak_and_print(f"\n[Quiz Item] Form character: {target}")
+            await self.speak_and_print(f"\n Make character: {target}")
 
             received = await self.listener.wait_for_input()
 
             if received == target:
                 self.total_correct += 1
-                await self.speak_and_print(f"Correct! {received} submitted.")
+                await self.speak_and_print(f"Good Job! You made Letter {received}.")
             elif received == "UNKNOWN":
                 await self.speak_and_print(f"Oops, that's not a letter. To form {target}, {directions}.")
             else:
-                await self.speak_and_print(f"Oops you made {received}. To form {target}, {directions}.")
+                await self.speak_and_print(f"Oops you made {received}.")
 
     async def start(self):
-        await self.speak_and_print("Welcome to Braille Buddy, Unit 1 Alphabet Curriculum.")
-        await self.speak_and_print("Progress through 5 lessons covering A through Z.")
+        #await self.speak_and_print("Welcome to Braille Buddy, Unit 1 Alphabet Curriculum.")
+        #await self.speak_and_print("Progress through 5 lessons covering A through Z.")
 
         try:
             for unit in ALPHABET_UNITS:
@@ -125,7 +132,7 @@ class UnitQuizEngine:
                 await self.speak_and_print(f"\nLesson {lesson_num} Complete!")
 
                 if lesson_num < len(ALPHABET_UNITS):
-                    await self.speak_and_print("Press Enter to move tot he next lesson.")
+                    await self.speak_and_print("Press Enter to move to the next lesson.")
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, input)
 
