@@ -69,10 +69,11 @@ class UnitQuizEngine:
         await self.speak_and_print(
             "What is your name?"
         )
-        time.sleep(3)
+        time.sleep(5)
         await self.speak_and_print(
             "Braille buddy device paired!"
         )
+        time.sleep(3)
         await self.speak_and_print(
             f"\n{'=' * 55}\n Let's start learning! We are going to learn (Letters {chars[0]} through {chars[-1]}) \n{'=' * 55}"
         )
@@ -90,6 +91,8 @@ class UnitQuizEngine:
                 if received == letter:
                     await self.speak_and_print(f"Good Job! You made letter {letter}.")
                     break
+                elif received == "not a letter":
+                    await self.speak_and_print(f"Oops! That is {received}. Let's try again.")
                 else:
                     await self.speak_and_print(f"Oops! you made {received}. Let's try again.")
 

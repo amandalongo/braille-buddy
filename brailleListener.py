@@ -29,7 +29,7 @@ class BrailleListener:
 
     def _notification_handler(self, sender, data: bytearray):
         raw_binary = data.decode("utf-8").strip()
-        self.last_letter = BRAILLE_MAP.get(raw_binary, "UNKNOWN")
+        self.last_letter = BRAILLE_MAP.get(raw_binary, "not a letter")
         self.event.set()
 
     async def connect(self) -> bool:
