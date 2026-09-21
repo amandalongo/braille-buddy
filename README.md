@@ -1,5 +1,6 @@
 # braille buddy
 braille buddy - learning braille for kids made interactive and easy! 
+by: Amanda, Adeel, Eknoor and Shrey
 
 <img width="900" height="600" alt="1" src="https://github.com/user-attachments/assets/afc57772-3061-4511-8eb3-10a497d4ba1d" />
 
